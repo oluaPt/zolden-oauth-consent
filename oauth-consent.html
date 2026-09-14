@@ -22,9 +22,9 @@ button{box-sizing:border-box;width:100%;padding:13px;margin:7px 0;border-radius:
 <button id="deny" class="secondary">Recusar</button>
 </section>
 </main>
-<script type="module">
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@latest';
-const sb=createClient('https://ghohfaaxkkrstnpgnzeg.supabase.co','sb_publishable_F5y19he6NDWgEB0e7V1JZw_JsyBsYtz');
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const sb=supabase.createClient('https://ghohfaaxkkrstnpgnzeg.supabase.co','sb_publishable_F5y19he6NDWgEB0e7V1JZw_JsyBsYtz');
 const functionBase='https://ghohfaaxkkrstnpgnzeg.supabase.co/functions/v1/zolden-mcp';
 const q=new URLSearchParams(location.search),aid=q.get('authorization_id');
 const status=document.querySelector('#status'),consent=document.querySelector('#consent');
@@ -33,17 +33,17 @@ async function session(){return(await sb.auth.getSession()).data.session}
 async function claimStatus(s){const r=await fetch(functionBase+'/owner-status',{headers:{Authorization:'Bearer '+s.access_token}});return r.ok}
 async function load(){
  if(!aid){msg('Pedido OAuth inválido: falta authorization_id.','error');return}
- let s=await session();
+ msg('A verificar sessão…');let s=await session();
  if(!s){
   const {data,error}=await sb.auth.signInAnonymously();
   if(error||!data.session){msg(error?.message||'Não foi possível criar a sessão.','error');return}
-  s=data.session
+  s=data.session;msg('Sessão criada; a preparar autorização…')
  }
  if(!await claimStatus(s)){
   const r=await fetch(functionBase+'/claim-owner',{method:'POST',headers:{Authorization:'Bearer '+s.access_token}});
   if(!r.ok){const d=await r.json().catch(()=>({}));msg(d.error||'Não foi possível activar o proprietário.','error');return}
  }
- const {data,error}=await sb.auth.oauth.getAuthorizationDetails(aid);
+ msg('A carregar autorização…');const {data,error}=await sb.auth.oauth.getAuthorizationDetails(aid);
  if(error){msg(error.message,'error');return}
  if(data.redirect_url&&!data.authorization_id){location.href=data.redirect_url;return}
  document.querySelector('#details').textContent='Aplicação: '+data.client.name+' — permissões: '+(data.scope||'acesso Zolden');
