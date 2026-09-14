@@ -1,144 +1,63 @@
 <!doctype html>
 <html lang="pt">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Autorizar Zolden</title>
-  <style>
-    body { font: 16px system-ui; background: #090b10; color: #f5f7fb; max-width: 620px; margin: 48px auto; padding: 20px; }
-    main { background: #151923; border: 1px solid #2b3242; border-radius: 18px; padding: 26px; }
-    input, button { box-sizing: border-box; width: 100%; padding: 13px; margin: 7px 0; border-radius: 10px; border: 1px solid #3a4356; background: #0e121a; color: #fff; }
-    button { background: #3468ff; border: 0; font-weight: 700; cursor: pointer; }
-    .secondary { background: #343a48; }
-    .muted { color: #aeb7c8; font-size: 14px; }
-    .ok { color: #52df8b; }
-    .error { color: #ff718d; }
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Autorizar Zolden</title>
+<style>
+body{font:16px system-ui;background:#090b10;color:#f5f7fb;max-width:620px;margin:48px auto;padding:20px}
+main{background:#151923;border:1px solid #2b3242;border-radius:18px;padding:26px}
+button{box-sizing:border-box;width:100%;padding:13px;margin:7px 0;border-radius:10px;border:0;background:#3468ff;color:#fff;font-weight:700;cursor:pointer}
+.secondary{background:#343a48}.muted{color:#aeb7c8;font-size:14px}.ok{color:#52df8b}.error{color:#ff718d}
+</style>
 </head>
 <body>
-  <main>
-    <h1>Zolden</h1>
-    <p>Autorize o ChatGPT normal a usar o State Store privado.</p>
-    <div id="status" class="muted">A iniciar…</div>
-    <section id="login" hidden>
-      <input id="email" type="email" autocomplete="email" placeholder="O seu email">
-      <button id="send">Enviar código por email</button>
-      <input id="otp" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="Código recebido">
-      <button id="verify">Confirmar código</button>
-    </section>
-    <section id="claim" hidden>
-      <input id="ownerCode" type="password" autocomplete="off" placeholder="Código único de ativação">
-      <button id="claimBtn">Ativar esta conta</button>
-    </section>
-    <section id="consent" hidden>
-      <div id="details"></div>
-      <button id="approve">Autorizar ChatGPT</button>
-      <button id="deny" class="secondary">Recusar</button>
-    </section>
-  </main>
-  <script type="module">
-    import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.57.4';
-
-    const sb = createClient(
-      'https://ghohfaaxkkrstnpgnzeg.supabase.co',
-      'sb_publishable_F5y19he6NDWgEB0e7V1JZw_JsyBsYtz'
-    );
-    const functionBase = 'https://ghohfaaxkkrstnpgnzeg.supabase.co/functions/v1/zolden-mcp';
-    const q = new URLSearchParams(location.search);
-    const aid = q.get('authorization_id');
-    const status = document.querySelector('#status');
-    const login = document.querySelector('#login');
-    const claim = document.querySelector('#claim');
-    const consent = document.querySelector('#consent');
-
-    function msg(text, className = 'muted') {
-      status.textContent = text;
-      status.className = className;
-    }
-
-    async function session() {
-      return (await sb.auth.getSession()).data.session;
-    }
-
-    async function claimStatus(currentSession) {
-      const response = await fetch(functionBase + '/owner-status', {
-        headers: { Authorization: 'Bearer ' + currentSession.access_token }
-      });
-      return response.ok;
-    }
-
-    async function load() {
-      if (!aid) {
-        msg('Pedido OAuth inválido: falta authorization_id.', 'error');
-        return;
-      }
-      const currentSession = await session();
-      if (!currentSession) {
-        login.hidden = false;
-        msg('Entre com um código enviado por email.');
-        return;
-      }
-      if (!await claimStatus(currentSession)) {
-        claim.hidden = false;
-        msg('Conta autenticada. Falta a ativação única.');
-        return;
-      }
-      const { data, error } = await sb.auth.oauth.getAuthorizationDetails(aid);
-      if (error) {
-        msg(error.message, 'error');
-        return;
-      }
-      if (data.redirect_url && !data.authorization_id) {
-        location.href = data.redirect_url;
-        return;
-      }
-      document.querySelector('#details').textContent = 'Aplicação: ' + data.client.name + ' — permissões: ' + (data.scope || 'acesso Zolden');
-      consent.hidden = false;
-      msg('Confirme a autorização.', 'ok');
-    }
-
-    document.querySelector('#send').onclick = async () => {
-      const email = document.querySelector('#email').value.trim();
-      const { error } = await sb.auth.signInWithOtp({ email, options: { shouldCreateUser: true } });
-      msg(error ? error.message : 'Código enviado. Veja o email.', error ? 'error' : 'ok');
-    };
-
-    document.querySelector('#verify').onclick = async () => {
-      const email = document.querySelector('#email').value.trim();
-      const token = document.querySelector('#otp').value.trim();
-      const { error } = await sb.auth.verifyOtp({ email, token, type: 'email' });
-      if (error) msg(error.message, 'error');
-      else location.reload();
-    };
-
-    document.querySelector('#claimBtn').onclick = async () => {
-      const currentSession = await session();
-      const response = await fetch(functionBase + '/claim-owner', {
-        method: 'POST',
-        headers: {
-          Authorization: 'Bearer ' + currentSession.access_token,
-          'content-type': 'application/json'
-        },
-        body: JSON.stringify({ code: document.querySelector('#ownerCode').value })
-      });
-      const data = await response.json();
-      if (!response.ok) msg(data.error || 'Falha na ativação', 'error');
-      else location.reload();
-    };
-
-    document.querySelector('#approve').onclick = async () => {
-      const { data, error } = await sb.auth.oauth.approveAuthorization(aid);
-      if (error) msg(error.message, 'error');
-      else location.href = data.redirect_url;
-    };
-
-    document.querySelector('#deny').onclick = async () => {
-      const { data, error } = await sb.auth.oauth.denyAuthorization(aid);
-      if (error) msg(error.message, 'error');
-      else location.href = data.redirect_url;
-    };
-
-    load();
-  </script>
+<main>
+<h1>Zolden</h1>
+<p>Autorize o ChatGPT normal a usar o State Store privado.</p>
+<div id="status" class="muted">A criar sessão anónima…</div>
+<section id="consent" hidden>
+<div id="details"></div>
+<button id="approve">Autorizar ChatGPT</button>
+<button id="deny" class="secondary">Recusar</button>
+</section>
+</main>
+<script type="module">
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.57.4';
+const sb=createClient('https://ghohfaaxkkrstnpgnzeg.supabase.co','sb_publishable_F5y19he6NDWgEB0e7V1JZw_JsyBsYtz');
+const functionBase='https://ghohfaaxkkrstnpgnzeg.supabase.co/functions/v1/zolden-mcp';
+const q=new URLSearchParams(location.search),aid=q.get('authorization_id');
+const status=document.querySelector('#status'),consent=document.querySelector('#consent');
+function msg(t,c='muted'){status.textContent=t;status.className=c}
+async function session(){return(await sb.auth.getSession()).data.session}
+async function claimStatus(s){const r=await fetch(functionBase+'/owner-status',{headers:{Authorization:'Bearer '+s.access_token}});return r.ok}
+async function load(){
+ if(!aid){msg('Pedido OAuth inválido: falta authorization_id.','error');return}
+ let s=await session();
+ if(!s){
+  const {data,error}=await sb.auth.signInAnonymously();
+  if(error||!data.session){msg(error?.message||'Não foi possível criar a sessão.','error');return}
+  s=data.session
+ }
+ if(!await claimStatus(s)){
+  const r=await fetch(functionBase+'/claim-owner',{method:'POST',headers:{Authorization:'Bearer '+s.access_token}});
+  if(!r.ok){const d=await r.json().catch(()=>({}));msg(d.error||'Não foi possível activar o proprietário.','error');return}
+ }
+ const {data,error}=await sb.auth.oauth.getAuthorizationDetails(aid);
+ if(error){msg(error.message,'error');return}
+ if(data.redirect_url&&!data.authorization_id){location.href=data.redirect_url;return}
+ document.querySelector('#details').textContent='Aplicação: '+data.client.name+' — permissões: '+(data.scope||'acesso Zolden');
+ consent.hidden=false;msg('Sessão criada. Confirme a autorização.','ok')
+}
+document.querySelector('#approve').onclick=async()=>{
+ const {data,error}=await sb.auth.oauth.approveAuthorization(aid);
+ if(error)msg(error.message,'error');else location.href=data.redirect_url
+};
+document.querySelector('#deny').onclick=async()=>{
+ const {data,error}=await sb.auth.oauth.denyAuthorization(aid);
+ if(error)msg(error.message,'error');else location.href=data.redirect_url
+};
+load();
+</script>
 </body>
 </html>
